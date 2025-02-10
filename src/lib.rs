@@ -12,8 +12,8 @@ pub struct CowVec {
     root: NodePointer,
 }
 
-const LEAF_SIZE: usize = 4000;
-const INNER_SIZE: usize = 500;
+const LEAF_SIZE: usize = if cfg!(test) { 32 } else { 4000 };
+const INNER_SIZE: usize = if cfg!(test) { 4 } else { 500 };
 
 #[derive(Clone)]
 enum CowVecNode {
@@ -222,5 +222,27 @@ impl CowVec {
             stack_end_height: self.root_height,
             stack,
         }
+    }
+
+    pub fn iter_chunks(&self) -> impl Iterator<Item = &[u8]> {
+        let mut emitted = 0;
+        self.iter_nodes_pre_order()
+            .flat_map(|(node, height)| {
+                let zero_leaf = &[0u8; LEAF_SIZE];
+                match node.0.as_deref() {
+                    None => {
+                        let leaf_count = INNER_SIZE.pow(height as u32);
+                        std::iter::repeat_n(zero_leaf, leaf_count)
+                    }
+                    Some(CowVecNode::Inner(_)) => std::iter::repeat_n(zero_leaf, 0),
+                    Some(CowVecNode::Leaf(b)) => std::iter::repeat_n(b, 1),
+                }
+            })
+            .map(move |x| {
+                let emit = (self.size - emitted).min(x.len());
+                emitted += emit;
+                &x[..emit]
+            })
+            .filter(|x| !x.is_empty())
     }
 }
