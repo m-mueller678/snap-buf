@@ -55,12 +55,16 @@ impl NodePointer {
                 let first_child = start / child_size;
                 let last_child = ((start + values.len() - 1) / child_size).min(children.len() - 1);
                 for child in first_child..=last_child {
-                    let child_offset = first_child * child_size;
+                    let child_offset = child * child_size;
                     if child_offset <= start {
                         children[child].set_range(height - 1, start - child_offset, values)
                     } else {
                         let values = &values[child_offset - start..];
-                        children[child].set_range(height - 1, start.saturating_sub(0), values)
+                        children[child].set_range(
+                            height - 1,
+                            start.saturating_sub(child_offset),
+                            values,
+                        )
                     }
                 }
             }
@@ -86,7 +90,7 @@ impl NodePointer {
                 let first_child = start / child_size;
                 let last_child = ((end - 1) / child_size).min(children.len() - 1);
                 for child in first_child..=last_child {
-                    let child_offset = first_child * child_size;
+                    let child_offset = child * child_size;
                     children[child].clear_range(
                         height - 1,
                         start.saturating_sub(child_offset)..end - child_offset,
