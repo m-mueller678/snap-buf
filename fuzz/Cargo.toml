@@ -9,9 +9,15 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+itertools = "0.14.0"
+arbitrary = { version = "1", features = ["derive"] }
+
+[features]
+test=[]
 
 [dependencies.cow-vec]
 path = ".."
+features = ["test"]
 
 [[bin]]
 name = "fuzz_target_1"

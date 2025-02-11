@@ -10,8 +10,8 @@ pub struct CowVec {
     root: NodePointer,
 }
 
-const LEAF_SIZE: usize = if cfg!(test) { 32 } else { 4000 };
-const INNER_SIZE: usize = if cfg!(test) { 4 } else { 500 };
+const LEAF_SIZE: usize = if cfg!(feature = "test") { 32 } else { 4000 };
+const INNER_SIZE: usize = if cfg!(feature = "test") { 4 } else { 500 };
 
 #[derive(Clone)]
 enum CowVecNode {
@@ -100,7 +100,7 @@ impl NodePointer {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "test")]
     fn assert_minimal(&self) {
         if let Some(x) = &self.0 {
             match &**x {
@@ -260,7 +260,7 @@ impl CowVec {
         self.chunks().flat_map(|x| x.iter().copied())
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "test")]
     pub fn assert_minimal(&self) {
         self.root.assert_minimal();
     }
