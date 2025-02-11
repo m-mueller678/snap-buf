@@ -54,6 +54,7 @@ impl NodePointer {
                 let child_size = tree_size(height - 1);
                 let first_child = start / child_size;
                 let last_child = ((start + values.len() - 1) / child_size).min(children.len() - 1);
+                #[allow(clippy::needless_range_loop)]
                 for child in first_child..=last_child {
                     let child_offset = child * child_size;
                     if child_offset <= start {
@@ -126,6 +127,12 @@ fn tree_size(height: usize) -> usize {
     const_tree_size(height)
 }
 
+impl Default for CowVec {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CowVec {
     pub fn new() -> Self {
         CowVec {
@@ -172,6 +179,10 @@ impl CowVec {
             return;
         }
         self.root.set_range(self.root_height, offset, data);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     pub fn len(&self) -> usize {

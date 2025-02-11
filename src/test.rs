@@ -1,5 +1,5 @@
 use crate::{CowVec, CowVecNode, NodePointer};
-use arbitrary::{Arbitrary, Unstructured};
+use arbitrary::Arbitrary;
 use std::ops::Range;
 
 impl NodePointer {
@@ -26,25 +26,15 @@ impl CowVec {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Arbitrary)]
 pub enum Op {
-    Write(Range<usize>),
-    Clear(Range<usize>),
+    Write(Range<u16>),
+    Clear(Range<u16>),
+    Resize(u16),
 }
 
-impl<'a> Arbitrary<'a> for Op {
-    fn arbitrary(u: &mut Unstructured) -> arbitrary::Result<Self> {
-        let (is_write, range): (bool, Range<u16>) = Arbitrary::arbitrary(u)?;
-        if range.start > range.end {
-            return Err(arbitrary::Error::IncorrectFormat);
-        }
-        let range = range.start as usize..range.end as usize;
-        if is_write {
-            Ok(Op::Write(range))
-        } else {
-            Ok(Op::Clear(range))
-        }
-    }
+fn cast_range(x: Range<u16>) -> Range<usize> {
+    x.start as usize..x.end as usize
 }
 
 pub const MAX_TEST_OPS: usize = 250;
@@ -57,6 +47,7 @@ pub fn test(ops: &[Op]) {
     for op in ops {
         match op {
             Op::Write(range) => {
+                let range = cast_range(range.clone());
                 if std_vec.len() < range.end {
                     std_vec.resize(range.start, 0);
                     std_vec.extend(std::iter::repeat_n(write_id, range.len()));
@@ -67,11 +58,17 @@ pub fn test(ops: &[Op]) {
                 write_id += 1;
             }
             Op::Clear(range) => {
+                let range = cast_range(range.clone());
                 if range.end > std_vec.iter().len() {
                     continue;
                 }
                 std_vec[range.clone()].fill(0);
                 cow_vec.clear_range(range.clone());
+            }
+            Op::Resize(len) => {
+                let len = *len as usize;
+                cow_vec.resize(len);
+                std_vec.resize(len, 0);
             }
         }
     }
