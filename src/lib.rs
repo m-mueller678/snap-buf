@@ -69,7 +69,7 @@ impl NodePointer {
     fn clear_range(&mut self, height: usize, range: Range<usize>) {
         let start = range.start;
         let end = range.end;
-        let self_size = tree_size(height - 1);
+        let self_size = tree_size(height);
         if start == 0 && end >= self_size || self.0.is_none() {
             self.0 = None;
             return;
