@@ -78,3 +78,8 @@ pub fn test(ops: &[Op]) {
     cow_vec.assert_minimal();
     itertools::assert_equal(cow_vec.bytes(), std_vec.iter().copied());
 }
+
+#[test]
+fn run_test() {
+    test(&[])
+}

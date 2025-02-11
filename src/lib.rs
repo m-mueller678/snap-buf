@@ -198,7 +198,11 @@ impl CowVec {
                     let last_level = self.stack.last_mut()?;
                     if last_level.is_empty() {
                         self.stack.pop();
-                        self.stack_end_height -= 1;
+                        if self.stack_end_height == 0 {
+                            debug_assert!(self.stack.is_empty());
+                        } else {
+                            self.stack_end_height -= 1;
+                        }
                     } else {
                         break split_first_in_place(last_level);
                     }
