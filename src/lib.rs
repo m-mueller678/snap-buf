@@ -48,11 +48,12 @@ impl NodePointer {
     }
 
     fn set_range(&mut self, height: usize, start: usize, values: &[u8]) {
+        debug_assert!(start < tree_size(height));
         match self.get_mut(height) {
             CowVecNode::Inner(children) => {
                 let child_size = tree_size(height - 1);
                 let first_child = start / child_size;
-                let last_child = (start + values.len() - 1) / child_size;
+                let last_child = ((start + values.len() - 1) / child_size).min(children.len() - 1);
                 for child in first_child..=last_child {
                     let child_offset = first_child * child_size;
                     if child_offset <= start {
@@ -71,6 +72,7 @@ impl NodePointer {
         let start = range.start;
         let end = range.end;
         let self_size = tree_size(height);
+        debug_assert!(start < self_size);
         if start == 0 && end >= self_size || self.0.is_none() {
             self.0 = None;
             return;
@@ -79,7 +81,7 @@ impl NodePointer {
             CowVecNode::Inner(children) => {
                 let child_size = tree_size(height - 1);
                 let first_child = start / child_size;
-                let last_child = (end - 1) / child_size;
+                let last_child = ((end - 1) / child_size).min(children.len() - 1);
                 for child in first_child..=last_child {
                     let child_offset = first_child * child_size;
                     children[child].clear_range(
