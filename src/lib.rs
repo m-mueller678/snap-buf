@@ -1,9 +1,7 @@
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::mem;
-use std::num::NonZero;
-use std::ops::{Range, RangeInclusive};
-use std::sync::atomic::AtomicUsize;
+use std::ops::Range;
 use std::sync::Arc;
 
 pub struct CowVec {
@@ -102,16 +100,12 @@ impl NodePointer {
         }
     }
 
-    fn child_index(height: usize, index: usize) -> usize {
-        index / tree_size(height - 1)
-    }
-
     #[cfg(test)]
     fn assert_minimal(&self) {
-        if let Some(x) = self.0 {
-            match &*x {
+        if let Some(x) = &self.0 {
+            match &**x {
                 CowVecNode::Inner(x) => {
-                    assert!(x.iter().any(|y| y.is_some()));
+                    assert!(x.iter().any(|y| y.0.is_some()));
                     for y in x {
                         y.assert_minimal();
                     }
@@ -156,14 +150,13 @@ impl CowVec {
             Ordering::Greater => {
                 while tree_size(self.root_height) < new_size {
                     if self.root.0.is_some() {
-                        let mut new_root =
-                            Arc::new(CowVecNode::Inner(array_init::array_init(|x| {
-                                if x == 0 {
-                                    self.root.clone()
-                                } else {
-                                    NodePointer(None)
-                                }
-                            })));
+                        let new_root = Arc::new(CowVecNode::Inner(array_init::array_init(|x| {
+                            if x == 0 {
+                                self.root.clone()
+                            } else {
+                                NodePointer(None)
+                            }
+                        })));
                         self.root = NodePointer(Some(new_root.clone()));
                     }
                     self.root_height += 1;
@@ -206,7 +199,7 @@ impl CowVec {
         }
 
         fn split_first_in_place<'x, 's, T>(x: &'x mut &'s [T]) -> &'s T {
-            let (first, rest) = mem::replace(x, &[]).split_first().unwrap();
+            let (first, rest) = mem::take(x).split_first().unwrap();
             *x = rest;
             first
         }
@@ -263,7 +256,7 @@ impl CowVec {
             .filter(|x| !x.is_empty())
     }
 
-    pub fn bytes(&self) -> impl Iterator<Item = u8> {
+    pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.chunks().flat_map(|x| x.iter().copied())
     }
 
