@@ -155,8 +155,9 @@ impl CowVec {
 
     /// Write data at specified offset, growing if necessary.
     pub fn write(&mut self, offset: usize, data: &[u8]) {
-        if offset < self.size {
-            self.resize(offset + data.len());
+        let write_end = offset + data.len();
+        if self.size < write_end {
+            self.resize(write_end);
         }
         if data.is_empty() {
             return;
