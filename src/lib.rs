@@ -4,6 +4,7 @@ use std::mem;
 use std::ops::Range;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct CowVec {
     size: usize,
     root_height: usize,
@@ -16,13 +17,13 @@ const INNER_SIZE: usize = if cfg!(feature = "test") { 4 } else { 500 };
 #[cfg(feature = "test")]
 pub mod test;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum CowVecNode {
     Inner([NodePointer; INNER_SIZE]),
     Leaf([u8; LEAF_SIZE]),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct NodePointer(Option<Arc<CowVecNode>>);
 
 impl NodePointer {
