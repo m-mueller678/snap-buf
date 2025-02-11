@@ -212,11 +212,7 @@ impl CowVec {
                     let last_level = self.stack.last_mut()?;
                     if last_level.is_empty() {
                         self.stack.pop();
-                        if self.stack_end_height == 0 {
-                            debug_assert!(self.stack.is_empty());
-                        } else {
-                            self.stack_end_height -= 1;
-                        }
+                        self.stack_end_height += 1;
                     } else {
                         break split_first_in_place(last_level);
                     }
@@ -224,7 +220,7 @@ impl CowVec {
                 let ret = (visit_now, self.stack_end_height);
                 if let Some(children) = visit_now.children() {
                     self.stack.push(children);
-                    self.stack_end_height += 1;
+                    self.stack_end_height -= 1;
                 }
                 Some(ret)
             }
