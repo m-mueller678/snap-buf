@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 array-init="2.1.0"
 smallvec = "1.13.2"
+
+[dev-dependencies]
+itertools = "0.14.0"

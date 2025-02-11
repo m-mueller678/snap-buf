@@ -105,6 +105,23 @@ impl NodePointer {
     fn child_index(height: usize, index: usize) -> usize {
         index / tree_size(height - 1)
     }
+
+    #[cfg(test)]
+    fn assert_minimal(&self) {
+        if let Some(x) = self.0 {
+            match &*x {
+                CowVecNode::Inner(x) => {
+                    assert!(x.iter().any(|y| y.is_some()));
+                    for y in x {
+                        y.assert_minimal();
+                    }
+                }
+                CowVecNode::Leaf(b) => {
+                    assert!(b.iter().any(|y| *y != 0));
+                }
+            }
+        }
+    }
 }
 
 const fn const_tree_size(height: usize) -> usize {
@@ -172,7 +189,7 @@ impl CowVec {
     ///
     /// # Panics
     /// Panics if range end is `range.end` > `self.len()`.
-    pub fn clear_range(&mut self, offset: usize, range: Range<usize>) {
+    pub fn clear_range(&mut self, range: Range<usize>) {
         assert!(range.end <= self.size);
         self.root.clear_range(self.root_height, range);
     }
@@ -224,7 +241,7 @@ impl CowVec {
         }
     }
 
-    pub fn iter_chunks(&self) -> impl Iterator<Item = &[u8]> {
+    pub fn chunks(&self) -> impl Iterator<Item = &[u8]> {
         let mut emitted = 0;
         self.iter_nodes_pre_order()
             .flat_map(|(node, height)| {
@@ -244,5 +261,14 @@ impl CowVec {
                 &x[..emit]
             })
             .filter(|x| !x.is_empty())
+    }
+
+    pub fn bytes(&self) -> impl Iterator<Item = u8> {
+        self.chunks().flat_map(|x| x.iter().copied())
+    }
+
+    #[cfg(test)]
+    pub fn assert_minimal(&self) {
+        self.root.assert_minimal();
     }
 }
