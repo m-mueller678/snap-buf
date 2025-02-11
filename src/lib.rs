@@ -158,6 +158,9 @@ impl CowVec {
         if offset < self.size {
             self.resize(offset + data.len());
         }
+        if data.is_empty() {
+            return;
+        }
         self.root.set_range(self.root_height, offset, data);
     }
 
