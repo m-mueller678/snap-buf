@@ -64,7 +64,10 @@ impl NodePointer {
                     }
                 }
             }
-            CowVecNode::Leaf(_) => {}
+            CowVecNode::Leaf(bytes) => {
+                let write_len = (bytes.len() - start).min(values.len());
+                bytes[start..start + write_len].copy_from_slice(&values[..write_len]);
+            }
         }
     }
 
