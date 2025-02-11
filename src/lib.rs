@@ -5,7 +5,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct CowVec {
+pub struct SharedBuffer {
     size: usize,
     root_height: usize,
     root: NodePointer,
@@ -18,29 +18,29 @@ const INNER_SIZE: usize = if cfg!(feature = "test") { 4 } else { 500 };
 pub mod test;
 
 #[derive(Clone, Debug)]
-enum CowVecNode {
+enum Node {
     Inner([NodePointer; INNER_SIZE]),
     Leaf([u8; LEAF_SIZE]),
 }
 
 #[derive(Clone, Debug)]
-struct NodePointer(Option<Arc<CowVecNode>>);
+struct NodePointer(Option<Arc<Node>>);
 
 impl NodePointer {
     fn children(&self) -> Option<&[NodePointer; INNER_SIZE]> {
         match &**(self.0.as_ref()?) {
-            CowVecNode::Inner(x) => Some(x),
-            CowVecNode::Leaf(_) => None,
+            Node::Inner(x) => Some(x),
+            Node::Leaf(_) => None,
         }
     }
 
-    fn get_mut(&mut self, height: usize) -> &mut CowVecNode {
+    fn get_mut(&mut self, height: usize) -> &mut Node {
         let arc = self.0.get_or_insert_with(|| {
             Arc::new({
                 if height == 0 {
-                    CowVecNode::Leaf([0; LEAF_SIZE])
+                    Node::Leaf([0; LEAF_SIZE])
                 } else {
-                    CowVecNode::Inner(array_init::array_init(|_| NodePointer(None)))
+                    Node::Inner(array_init::array_init(|_| NodePointer(None)))
                 }
             })
         });
@@ -50,7 +50,7 @@ impl NodePointer {
     fn set_range(&mut self, height: usize, start: usize, values: &[u8]) {
         debug_assert!(start < tree_size(height));
         match self.get_mut(height) {
-            CowVecNode::Inner(children) => {
+            Node::Inner(children) => {
                 let child_size = tree_size(height - 1);
                 let first_child = start / child_size;
                 let last_child = ((start + values.len() - 1) / child_size).min(children.len() - 1);
@@ -69,7 +69,7 @@ impl NodePointer {
                     }
                 }
             }
-            CowVecNode::Leaf(bytes) => {
+            Node::Leaf(bytes) => {
                 let write_len = (bytes.len() - start).min(values.len());
                 bytes[start..start + write_len].copy_from_slice(&values[..write_len]);
             }
@@ -86,10 +86,11 @@ impl NodePointer {
             return;
         }
         match self.get_mut(height) {
-            CowVecNode::Inner(children) => {
+            Node::Inner(children) => {
                 let child_size = tree_size(height - 1);
                 let first_child = start / child_size;
                 let last_child = ((end - 1) / child_size).min(children.len() - 1);
+                #[allow(clippy::needless_range_loop)]
                 for child in first_child..=last_child {
                     let child_offset = child * child_size;
                     children[child].clear_range(
@@ -104,7 +105,7 @@ impl NodePointer {
                     self.0 = None;
                 }
             }
-            CowVecNode::Leaf(bytes) => {
+            Node::Leaf(bytes) => {
                 let write_end = range.end.min(bytes.len());
                 bytes[start..write_end].fill(0);
                 if bytes[0] == 0 && *bytes.last().unwrap() == 0 && bytes.iter().all(|x| *x == 0) {
@@ -127,15 +128,15 @@ fn tree_size(height: usize) -> usize {
     const_tree_size(height)
 }
 
-impl Default for CowVec {
+impl Default for SharedBuffer {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CowVec {
+impl SharedBuffer {
     pub fn new() -> Self {
-        CowVec {
+        Self {
             root_height: 0,
             size: 0,
             root: NodePointer(None),
@@ -153,7 +154,7 @@ impl CowVec {
             Ordering::Greater => {
                 while tree_size(self.root_height) < new_size {
                     if self.root.0.is_some() {
-                        let new_root = Arc::new(CowVecNode::Inner(array_init::array_init(|x| {
+                        let new_root = Arc::new(Node::Inner(array_init::array_init(|x| {
                             if x == 0 {
                                 self.root.clone()
                             } else {
@@ -212,6 +213,7 @@ impl CowVec {
             stack: SmallVec<[&'a [NodePointer]; 5]>,
         }
 
+        #[allow(clippy::needless_lifetimes)]
         fn split_first_in_place<'x, 's, T>(x: &'x mut &'s [T]) -> &'s T {
             let (first, rest) = mem::take(x).split_first().unwrap();
             *x = rest;
@@ -258,8 +260,8 @@ impl CowVec {
                         let leaf_count = INNER_SIZE.pow(height as u32);
                         std::iter::repeat_n(zero_leaf, leaf_count)
                     }
-                    Some(CowVecNode::Inner(_)) => std::iter::repeat_n(zero_leaf, 0),
-                    Some(CowVecNode::Leaf(b)) => std::iter::repeat_n(b, 1),
+                    Some(Node::Inner(_)) => std::iter::repeat_n(zero_leaf, 0),
+                    Some(Node::Leaf(b)) => std::iter::repeat_n(b, 1),
                 }
             })
             .map(move |x| {

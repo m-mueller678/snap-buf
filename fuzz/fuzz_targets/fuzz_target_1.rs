@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::{fuzz_target, Corpus};
-use cow_vec::test::{test, Op, MAX_TEST_OPS};
+use shared_buffer::test::{test, Op, MAX_TEST_OPS};
 
 fuzz_target!(|ops: Vec<Op>|->Corpus{
     if ops.len()>MAX_TEST_OPS{

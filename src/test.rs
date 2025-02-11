@@ -1,4 +1,4 @@
-use crate::{CowVec, CowVecNode, NodePointer};
+use crate::{Node, NodePointer, SharedBuffer};
 use arbitrary::Arbitrary;
 use std::ops::Range;
 
@@ -6,13 +6,13 @@ impl NodePointer {
     fn assert_minimal(&self) {
         if let Some(x) = &self.0 {
             match &**x {
-                CowVecNode::Inner(x) => {
+                Node::Inner(x) => {
                     assert!(x.iter().any(|y| y.0.is_some()));
                     for y in x {
                         y.assert_minimal();
                     }
                 }
-                CowVecNode::Leaf(b) => {
+                Node::Leaf(b) => {
                     assert!(b.iter().any(|y| *y != 0));
                 }
             }
@@ -20,7 +20,7 @@ impl NodePointer {
     }
 }
 
-impl CowVec {
+impl SharedBuffer {
     fn assert_minimal(&self) {
         self.root.assert_minimal();
     }
@@ -42,7 +42,7 @@ pub const MAX_TEST_OPS: usize = 250;
 pub fn test(ops: &[Op]) {
     assert!(ops.len() <= MAX_TEST_OPS);
     let mut write_id = 1;
-    let mut cow_vec = CowVec::new();
+    let mut our_vec = SharedBuffer::new();
     let mut std_vec = Vec::new();
     for op in ops {
         match op {
@@ -54,7 +54,7 @@ pub fn test(ops: &[Op]) {
                 } else {
                     std_vec[range.clone()].fill(write_id);
                 }
-                cow_vec.write(range.start, &std_vec[range.clone()]);
+                our_vec.write(range.start, &std_vec[range.clone()]);
                 write_id += 1;
             }
             Op::Clear(range) => {
@@ -63,18 +63,18 @@ pub fn test(ops: &[Op]) {
                     continue;
                 }
                 std_vec[range.clone()].fill(0);
-                cow_vec.clear_range(range.clone());
+                our_vec.clear_range(range.clone());
             }
             Op::Resize(len) => {
                 let len = *len as usize;
-                cow_vec.resize(len);
+                our_vec.resize(len);
                 std_vec.resize(len, 0);
             }
         }
     }
-    assert_eq!(std_vec.len(), cow_vec.len());
-    cow_vec.assert_minimal();
-    itertools::assert_equal(cow_vec.bytes(), std_vec.iter().copied());
+    assert_eq!(std_vec.len(), our_vec.len());
+    our_vec.assert_minimal();
+    itertools::assert_equal(our_vec.bytes(), std_vec.iter().copied());
 }
 
 #[test]
