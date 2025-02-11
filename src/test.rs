@@ -72,6 +72,7 @@ pub fn test(ops: &[Op]) {
             }
         }
     }
+    assert_eq!(std_vec.len(), cow_vec.len());
     cow_vec.assert_minimal();
     itertools::assert_equal(cow_vec.bytes(), std_vec.iter().copied());
 }
