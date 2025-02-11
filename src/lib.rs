@@ -13,6 +13,9 @@ pub struct CowVec {
 const LEAF_SIZE: usize = if cfg!(feature = "test") { 32 } else { 4000 };
 const INNER_SIZE: usize = if cfg!(feature = "test") { 4 } else { 500 };
 
+#[cfg(feature = "test")]
+pub mod test;
+
 #[derive(Clone)]
 enum CowVecNode {
     Inner([NodePointer; INNER_SIZE]),
@@ -95,23 +98,6 @@ impl NodePointer {
                 bytes[start..write_end].fill(0);
                 if bytes[0] == 0 && *bytes.last().unwrap() == 0 && bytes.iter().all(|x| *x == 0) {
                     self.0 = None;
-                }
-            }
-        }
-    }
-
-    #[cfg(feature = "test")]
-    fn assert_minimal(&self) {
-        if let Some(x) = &self.0 {
-            match &**x {
-                CowVecNode::Inner(x) => {
-                    assert!(x.iter().any(|y| y.0.is_some()));
-                    for y in x {
-                        y.assert_minimal();
-                    }
-                }
-                CowVecNode::Leaf(b) => {
-                    assert!(b.iter().any(|y| *y != 0));
                 }
             }
         }
@@ -258,10 +244,5 @@ impl CowVec {
 
     pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.chunks().flat_map(|x| x.iter().copied())
-    }
-
-    #[cfg(feature = "test")]
-    pub fn assert_minimal(&self) {
-        self.root.assert_minimal();
     }
 }
