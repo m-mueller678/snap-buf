@@ -184,6 +184,9 @@ impl CowVec {
     /// Panics if range end is `range.end` > `self.len()`.
     pub fn clear_range(&mut self, range: Range<usize>) {
         assert!(range.end <= self.size);
+        if range.is_empty() {
+            return;
+        }
         self.root.clear_range(self.root_height, range);
     }
 
