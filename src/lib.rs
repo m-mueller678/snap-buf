@@ -155,6 +155,40 @@ impl NodePointer {
             }
         }
     }
+
+    fn put_leaf(&mut self, height: usize, offset: usize, leaf: NodePointer) {
+        match self.get_mut(height) {
+            Node::Inner(children) => {
+                let range = offset as isize..offset as isize + 1;
+                let (co, c) = Self::affected_children(children, height - 1, range)
+                    .next()
+                    .unwrap();
+                c.put_leaf(height - 1, offset - co as usize, leaf);
+            }
+            Node::Leaf(_) => {
+                debug_assert_eq!(offset, 0);
+                *self = leaf;
+            }
+        }
+    }
+
+    fn locate_leaf(
+        &mut self,
+        height: usize,
+        offset: usize,
+    ) -> Option<(usize, &mut [u8; LEAF_SIZE])> {
+        self.0.as_ref()?;
+        match self.get_mut(height) {
+            Node::Inner(children) => {
+                let range = offset as isize..offset as isize + 1;
+                let (co, c) = Self::affected_children(children, height - 1, range)
+                    .next()
+                    .unwrap();
+                c.locate_leaf(height - 1, offset - co as usize)
+            }
+            Node::Leaf(x) => Some((offset, x)),
+        }
+    }
 }
 
 const fn const_tree_size(height: usize) -> usize {
@@ -193,8 +227,8 @@ impl SnapBuf {
         self.size = new_len;
     }
 
-    fn grow_zero(&mut self, new_len: usize) {
-        while tree_size(self.root_height) < new_len {
+    fn grow_height_until(&mut self, min_size: usize) {
+        while tree_size(self.root_height) < min_size {
             if self.root.0.is_some() {
                 let new_root = Arc::new(Node::Inner(array_init::array_init(|x| {
                     if x == 0 {
@@ -207,6 +241,10 @@ impl SnapBuf {
             }
             self.root_height += 1;
         }
+    }
+
+    fn grow_zero(&mut self, new_len: usize) {
+        self.grow_height_until(new_len);
         self.size = new_len;
     }
 
@@ -377,5 +415,78 @@ impl SnapBuf {
 
     pub fn extend_from_slice(&mut self, data: &[u8]) {
         self.write(self.size, data)
+    }
+
+    pub fn extend(&mut self, it: &mut impl Iterator<Item = u8>) {
+        fn generate_leaf(
+            start_at: usize,
+            iter: &mut impl Iterator<Item = u8>,
+        ) -> (usize, NodePointer) {
+            let mut consumed = start_at;
+            let first_non_zero = loop {
+                if let Some(x) = iter.next() {
+                    consumed += 1;
+                    if x != 0 {
+                        break x;
+                    }
+                } else {
+                    return (consumed, NodePointer(None));
+                }
+                if consumed == LEAF_SIZE {
+                    return (LEAF_SIZE, NodePointer(None));
+                }
+            };
+            let mut leaf = Arc::new(Node::Leaf([0u8; LEAF_SIZE]));
+            let leaf_mut = if let Node::Leaf(x) = Arc::get_mut(&mut leaf).unwrap() {
+                x
+            } else {
+                unreachable!()
+            };
+            leaf_mut[consumed - 1] = first_non_zero;
+            while consumed < LEAF_SIZE {
+                if let Some(x) = iter.next() {
+                    leaf_mut[consumed] = x;
+                    consumed += 1;
+                } else {
+                    break;
+                }
+            }
+            (consumed, NodePointer(Some(leaf)))
+        }
+
+        if self.size < tree_size(self.root_height) {
+            if let Some((offset, first_leaf)) = self.root.locate_leaf(self.root_height, self.size) {
+                for i in offset..LEAF_SIZE {
+                    let Some(x) = it.next() else { return };
+                    first_leaf[i] = x;
+                    self.size += 1;
+                }
+                assert_eq!(self.size % LEAF_SIZE, 0);
+            }
+        } else {
+            assert_eq!(self.size % LEAF_SIZE, 0);
+        }
+        loop {
+            let in_leaf_offset = self.size % LEAF_SIZE;
+            let (consumed, leaf) = generate_leaf(in_leaf_offset, it);
+            if leaf.0.is_some() {
+                self.grow_height_until(self.size + 1);
+                self.root.put_leaf(self.root_height, self.size, leaf);
+            }
+            self.size = self.size - in_leaf_offset + consumed;
+            if consumed < LEAF_SIZE {
+                return;
+            }
+            assert_eq!(self.size % LEAF_SIZE, 0);
+        }
+    }
+}
+
+impl FromIterator<u8> for SnapBuf {
+    fn from_iter<T: IntoIterator<Item = u8>>(iter: T) -> Self {
+        let mut iter = iter.into_iter();
+        let mut ret = Self::new();
+        ret.extend(&mut iter);
+        ret
     }
 }
