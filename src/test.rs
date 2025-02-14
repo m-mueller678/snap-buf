@@ -1,6 +1,8 @@
 use crate::{Node, NodePointer, SharedBuffer};
+use alloc::vec::Vec;
 use arbitrary::Arbitrary;
-use std::ops::Range;
+use core::iter;
+use core::ops::Range;
 
 impl NodePointer {
     fn assert_minimal(&self) {
@@ -50,7 +52,7 @@ pub fn test(ops: &[Op]) {
                 let range = cast_range(range.clone());
                 if std_vec.len() < range.end {
                     std_vec.resize(range.start, 0);
-                    std_vec.extend(std::iter::repeat_n(write_id, range.len()));
+                    std_vec.extend(iter::repeat_n(write_id, range.len()));
                 } else {
                     std_vec[range.clone()].fill(write_id);
                 }

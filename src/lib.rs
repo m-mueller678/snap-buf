@@ -1,3 +1,4 @@
+#![no_std]
 //! A [SharedBuffer] is similar to a `Vec<u8>`, but with copy on write semantics.
 //!
 //! SharedBuffer is intended to provide cheap snapshotting on byte buffers.
@@ -5,11 +6,15 @@
 //! Only modified subtrees are cloned, so buffers with only little differences can share most of their memory.
 //! Moreover, segments which contain only zeros take up no memory.
 
+extern crate alloc;
+#[cfg(feature = "test")]
+extern crate std;
+
+use alloc::sync::Arc;
+use core::cmp::Ordering;
+use core::ops::Range;
+use core::{iter, mem, slice};
 use smallvec::SmallVec;
-use std::cmp::Ordering;
-use std::mem;
-use std::ops::Range;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct SharedBuffer {
@@ -262,7 +267,7 @@ impl SharedBuffer {
         }
 
         let mut stack = SmallVec::new();
-        stack.push(std::slice::from_ref(&self.root));
+        stack.push(slice::from_ref(&self.root));
         IterStack {
             stack_end_height: self.root_height,
             stack,
@@ -280,10 +285,10 @@ impl SharedBuffer {
                 match node.0.as_deref() {
                     None => {
                         let leaf_count = INNER_SIZE.pow(height as u32);
-                        std::iter::repeat_n(zero_leaf, leaf_count)
+                        iter::repeat_n(zero_leaf, leaf_count)
                     }
-                    Some(Node::Inner(_)) => std::iter::repeat_n(zero_leaf, 0),
-                    Some(Node::Leaf(b)) => std::iter::repeat_n(b, 1),
+                    Some(Node::Inner(_)) => iter::repeat_n(zero_leaf, 0),
+                    Some(Node::Leaf(b)) => iter::repeat_n(b, 1),
                 }
             })
             .map(move |x| {
