@@ -1,4 +1,4 @@
-use crate::{Node, NodePointer, SharedBuffer};
+use crate::{Node, NodePointer, SnapBuf};
 use alloc::vec::Vec;
 use arbitrary::Arbitrary;
 use core::iter;
@@ -22,7 +22,7 @@ impl NodePointer {
     }
 }
 
-impl SharedBuffer {
+impl SnapBuf {
     fn assert_minimal(&self) {
         self.root.assert_minimal();
     }
@@ -44,7 +44,7 @@ pub const MAX_TEST_OPS: usize = 250;
 pub fn test(ops: &[Op]) {
     assert!(ops.len() <= MAX_TEST_OPS);
     let mut write_id = 1;
-    let mut our_vec = SharedBuffer::new();
+    let mut our_vec = SnapBuf::new();
     let mut std_vec = Vec::new();
     for op in ops {
         match op {

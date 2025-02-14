@@ -1,12 +1,12 @@
 [package]
-name = "shared-buffer"
+name = "snap-buf"
 version = "0.1.0"
 edition = "2021"
 keywords = ["buffer","byte-buffer","byte-buffer","cow","mvcc"]
 categories = ["no-std","memory-management","data-structures","concurrency"]
 authors = ["m-mueller678"]
 description = "A copy on write byte buffer for efficient snapshotting"
-repository = "https://github.com/m-mueller678/shared-buffer"
+repository = "https://github.com/m-mueller678/snap-buf"
 license = "MIT OR Apache-2.0"
 exclude = ["/coverage.sh","rustfmt.toml"]
 

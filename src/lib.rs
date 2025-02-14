@@ -1,10 +1,9 @@
 #![no_std]
-//! A [SharedBuffer] is similar to a `Vec<u8>`, but with copy on write semantics.
+//! A [SnapBuf] is like a `Vec<u8>` with cheap snapshotting using copy on write.
 //!
-//! SharedBuffer is intended to provide cheap snapshotting on byte buffers.
 //! Internally, the data is broken up into segments that are organized in a tree structure.
 //! Only modified subtrees are cloned, so buffers with only little differences can share most of their memory.
-//! Moreover, segments which contain only zeros take up no memory.
+//! Moreover, subtrees which contain only zeros take up no memory.
 
 extern crate alloc;
 #[cfg(feature = "test")]
@@ -17,7 +16,7 @@ use core::{iter, mem, slice};
 use smallvec::SmallVec;
 
 #[derive(Debug)]
-pub struct SharedBuffer {
+pub struct SnapBuf {
     size: usize,
     root_height: usize,
     root: NodePointer,
@@ -140,13 +139,13 @@ fn tree_size(height: usize) -> usize {
     const_tree_size(height)
 }
 
-impl Default for SharedBuffer {
+impl Default for SnapBuf {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl SharedBuffer {
+impl SnapBuf {
     /// Creates an empty buffer.
     pub fn new() -> Self {
         Self {
