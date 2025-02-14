@@ -374,4 +374,8 @@ impl SnapBuf {
     pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
         self.iter().copied()
     }
+
+    pub fn extend_from_slice(&mut self, data: &[u8]) {
+        self.write(self.size, data)
+    }
 }
