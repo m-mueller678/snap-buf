@@ -37,6 +37,16 @@ enum Node {
 #[derive(Clone, Debug)]
 struct NodePointer(Option<Arc<Node>>);
 
+macro_rules! deconstruct_range{
+    {$start:ident .. $end:ident = $range:expr,$height:expr} => {
+         let $start = $range.start;
+        let $end = $range.end;
+         // assert range overlaps
+        debug_assert!($start < tree_size($height) as isize);
+        debug_assert!($end > 0);
+    }
+}
+
 impl NodePointer {
     fn children(&self) -> Option<&[NodePointer; INNER_SIZE]> {
         match &**(self.0.as_ref()?) {
@@ -58,94 +68,88 @@ impl NodePointer {
         Arc::make_mut(arc)
     }
 
-    fn set_range(&mut self, height: usize, start: usize, values: &[u8]) {
-        debug_assert!(start < tree_size(height));
+    fn set_range(&mut self, height: usize, start: isize, values: &[u8]) {
+        deconstruct_range!(start..end = start .. start + values.len() as isize ,tree_size(height));
         match self.get_mut(height) {
             Node::Inner(children) => {
-                let child_size = tree_size(height - 1);
-                let first_child = start / child_size;
-                let last_child = ((start + values.len() - 1) / child_size).min(children.len() - 1);
-                #[allow(clippy::needless_range_loop)]
-                for child in first_child..=last_child {
-                    let child_offset = child * child_size;
-                    if child_offset <= start {
-                        children[child].set_range(height - 1, start - child_offset, values)
-                    } else {
-                        let values = &values[child_offset - start..];
-                        children[child].set_range(height - 1, 0, values)
-                    }
+                for (child_offset, child) in
+                    Self::affected_children(children, height - 1, start..end)
+                {
+                    child.set_range(height - 1, start - child_offset, values);
                 }
             }
             Node::Leaf(bytes) => {
-                let write_len = (bytes.len() - start).min(values.len());
-                bytes[start..start + write_len].copy_from_slice(&values[..write_len]);
+                let (src, dst) = if start < 0 {
+                    (&values[-start as usize..], &mut bytes[..])
+                } else {
+                    (values, &mut bytes[start as usize..])
+                };
+                let len = src.len() - dst.len();
+                dst[..len].copy_from_slice(&src[..len]);
             }
         }
     }
 
-    fn fill_range(&mut self, height: usize, range: Range<usize>, value: u8) {
-        let start = range.start;
-        let end = range.end;
-        debug_assert!(start < tree_size(height));
+    fn affected_children(
+        children: &mut [NodePointer; INNER_SIZE],
+        child_height: usize,
+        range: Range<isize>,
+    ) -> impl Iterator<Item = (isize, &mut NodePointer)> {
+        let start = range.start.max(0) as usize;
+        let child_size = tree_size(child_height);
+        children
+            .iter_mut()
+            .enumerate()
+            .skip(start / child_size)
+            .map(move |(i, c)| ((i * child_size) as isize, c))
+            .take_while(move |(offset, _)| (*offset) < range.end)
+    }
+
+    fn fill_range(&mut self, height: usize, range: Range<isize>, value: u8) {
+        deconstruct_range!(start..end=range,height);
         match self.get_mut(height) {
             Node::Inner(children) => {
-                let child_size = tree_size(height - 1);
-                let first_child = start / child_size;
-                let last_child = ((end - 1) / child_size).min(children.len() - 1);
-                #[allow(clippy::needless_range_loop)]
-                for child in first_child..=last_child {
-                    let child_offset = child * child_size;
-                    if child_offset <= start {
-                        children[child].fill_range(
-                            height - 1,
-                            start - child_offset..end - child_offset,
-                            value,
-                        )
-                    } else {
-                        children[child].fill_range(height - 1, 0..end - child_offset, value)
-                    }
+                for (child_offset, child) in
+                    Self::affected_children(children, height - 1, range.clone())
+                {
+                    child.fill_range(height - 1, start - child_offset..end - child_offset, value);
                 }
             }
             Node::Leaf(bytes) => {
-                let write_end = end.min(bytes.len());
-                bytes[start..write_end].fill(value);
+                let write_start = start.max(0) as usize;
+                let write_end = (end as usize).min(bytes.len());
+                bytes[write_start..write_end].fill(value);
             }
         }
     }
 
-    fn clear_range(&mut self, height: usize, range: Range<usize>) {
-        let start = range.start;
-        let end = range.end;
-        let self_size = tree_size(height);
-        debug_assert!(start < self_size);
-        if start == 0 && end >= self_size || self.0.is_none() {
+    fn clear_range(&mut self, height: usize, range: Range<isize>) {
+        fn range_all<T, const C: usize>(x: &[T; C], mut f: impl FnMut(&T) -> bool) -> bool {
+            let last = f(x.last().unwrap());
+            last && x[0..C - 1].iter().all(f)
+        }
+
+        deconstruct_range!(start..end = range,height);
+        if start <= 0 && end as usize >= tree_size(height) || self.0.is_none() {
             self.0 = None;
             return;
         }
         match self.get_mut(height) {
             Node::Inner(children) => {
-                let child_size = tree_size(height - 1);
-                let first_child = start / child_size;
-                let last_child = ((end - 1) / child_size).min(children.len() - 1);
-                #[allow(clippy::needless_range_loop)]
-                for child in first_child..=last_child {
-                    let child_offset = child * child_size;
-                    children[child].clear_range(
-                        height - 1,
-                        start.saturating_sub(child_offset)..end - child_offset,
-                    );
-                }
-                if children.first().unwrap().0.is_none()
-                    && children.last().unwrap().0.is_none()
-                    && children.iter().all(|x| x.0.is_none())
+                for (child_offset, child) in
+                    Self::affected_children(children, height - 1, range.clone())
                 {
+                    child.clear_range(height - 1, start - child_offset..end - child_offset);
+                }
+                if range_all(children, |c| c.0.is_none()) {
                     self.0 = None;
                 }
             }
             Node::Leaf(bytes) => {
-                let write_end = range.end.min(bytes.len());
-                bytes[start..write_end].fill(0);
-                if bytes[0] == 0 && *bytes.last().unwrap() == 0 && bytes.iter().all(|x| *x == 0) {
+                let write_start = start.max(0) as usize;
+                let write_end = (end as usize).min(bytes.len());
+                bytes[write_start..write_end].fill(0);
+                if range_all(bytes, |b| *b == 0) {
                     self.0 = None;
                 }
             }
@@ -182,8 +186,10 @@ impl SnapBuf {
     }
 
     fn shrink(&mut self, new_len: usize) {
-        self.root
-            .clear_range(self.root_height, new_len..tree_size(self.root_height));
+        self.root.clear_range(
+            self.root_height,
+            new_len as isize..tree_size(self.root_height) as isize,
+        );
         self.size = new_len;
     }
 
@@ -204,9 +210,10 @@ impl SnapBuf {
         self.size = new_len;
     }
 
-    /// Resizes the buffer, so that `len == new_len`.
+    /// Resizes the buffer, to the given length.
     ///
-    /// If `new_len` is greater than `len`, the new space in the buffer is filled with zeros.
+    /// If `new_len` is greater than `len`, the new space in the buffer is filled with copies of value.
+    /// This is more efficient if `value == 0`.
     #[inline]
     pub fn resize(&mut self, new_len: usize, value: u8) {
         match new_len.cmp(&self.size) {
@@ -224,7 +231,25 @@ impl SnapBuf {
         }
     }
 
-    pub fn fill_range(&mut self, range: Range<usize>, value: u8) {}
+    /// Shortens the buffer, keeping the first `new_len` bytes and discarding the rest.
+    ///
+    /// If `new_len` is greater or equal to the buffer’s current length, this has no effect.
+    pub fn truncate(&mut self, new_len: usize) {
+        if new_len > self.size {
+            self.shrink(new_len);
+        }
+    }
+
+    /// Fill the given range with copies of value.
+    ///
+    /// This is equivalent to calling [write](Self::write) with a slice filled with value.
+    pub fn fill_range(&mut self, range: Range<usize>, value: u8) {
+        if self.size < range.end {
+            self.grow_zero(range.end);
+        }
+        let range = range.start as isize..range.end as isize;
+        self.root.fill_range(self.root_height, range, value);
+    }
 
     /// Writes data at the specified offset.
     ///
@@ -234,12 +259,12 @@ impl SnapBuf {
     pub fn write(&mut self, offset: usize, data: &[u8]) {
         let write_end = offset + data.len();
         if self.size < write_end {
-            self.resize_zero(write_end);
+            self.resize(write_end, 0);
         }
         if data.is_empty() {
             return;
         }
-        self.root.set_range(self.root_height, offset, data);
+        self.root.set_range(self.root_height, offset as isize, data);
     }
 
     /// Returns `true` if the buffer length is zero.
@@ -254,7 +279,7 @@ impl SnapBuf {
         self.size
     }
 
-    /// Clears data in range, possibly freeing memory.
+    /// Fill a range with zeros, possibly freeing memory.
     ///
     /// # Panics
     /// Panics if range end is `range.end` > `self.len()`.
@@ -263,7 +288,8 @@ impl SnapBuf {
         if range.is_empty() {
             return;
         }
-        self.root.clear_range(self.root_height, range);
+        self.root
+            .clear_range(self.root_height, range.start as isize..range.end as isize);
     }
 
     /// Clears all data and sets length to 0.
