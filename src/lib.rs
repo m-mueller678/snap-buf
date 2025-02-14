@@ -72,17 +72,43 @@ impl NodePointer {
                         children[child].set_range(height - 1, start - child_offset, values)
                     } else {
                         let values = &values[child_offset - start..];
-                        children[child].set_range(
-                            height - 1,
-                            start.saturating_sub(child_offset),
-                            values,
-                        )
+                        children[child].set_range(height - 1, 0, values)
                     }
                 }
             }
             Node::Leaf(bytes) => {
                 let write_len = (bytes.len() - start).min(values.len());
                 bytes[start..start + write_len].copy_from_slice(&values[..write_len]);
+            }
+        }
+    }
+
+    fn fill_range(&mut self, height: usize, range: Range<usize>, value: u8) {
+        let start = range.start;
+        let end = range.end;
+        debug_assert!(start < tree_size(height));
+        match self.get_mut(height) {
+            Node::Inner(children) => {
+                let child_size = tree_size(height - 1);
+                let first_child = start / child_size;
+                let last_child = ((end - 1) / child_size).min(children.len() - 1);
+                #[allow(clippy::needless_range_loop)]
+                for child in first_child..=last_child {
+                    let child_offset = child * child_size;
+                    if child_offset <= start {
+                        children[child].fill_range(
+                            height - 1,
+                            start - child_offset..end - child_offset,
+                            value,
+                        )
+                    } else {
+                        children[child].fill_range(height - 1, 0..end - child_offset, value)
+                    }
+                }
+            }
+            Node::Leaf(bytes) => {
+                let write_end = end.min(bytes.len());
+                bytes[start..write_end].fill(value);
             }
         }
     }
@@ -155,35 +181,50 @@ impl SnapBuf {
         }
     }
 
+    fn shrink(&mut self, new_len: usize) {
+        self.root
+            .clear_range(self.root_height, new_len..tree_size(self.root_height));
+        self.size = new_len;
+    }
+
+    fn grow_zero(&mut self, new_len: usize) {
+        while tree_size(self.root_height) < new_len {
+            if self.root.0.is_some() {
+                let new_root = Arc::new(Node::Inner(array_init::array_init(|x| {
+                    if x == 0 {
+                        self.root.clone()
+                    } else {
+                        NodePointer(None)
+                    }
+                })));
+                self.root = NodePointer(Some(new_root.clone()));
+            }
+            self.root_height += 1;
+        }
+        self.size = new_len;
+    }
+
     /// Resizes the buffer, so that `len == new_len`.
     ///
     /// If `new_len` is greater than `len`, the new space in the buffer is filled with zeros.
-    pub fn resize_zero(&mut self, new_len: usize) {
+    #[inline]
+    pub fn resize(&mut self, new_len: usize, value: u8) {
         match new_len.cmp(&self.size) {
             Ordering::Less => {
-                self.root
-                    .clear_range(self.root_height, new_len..tree_size(self.root_height));
-                self.size = new_len;
+                self.shrink(new_len);
             }
             Ordering::Equal => {}
             Ordering::Greater => {
-                while tree_size(self.root_height) < new_len {
-                    if self.root.0.is_some() {
-                        let new_root = Arc::new(Node::Inner(array_init::array_init(|x| {
-                            if x == 0 {
-                                self.root.clone()
-                            } else {
-                                NodePointer(None)
-                            }
-                        })));
-                        self.root = NodePointer(Some(new_root.clone()));
-                    }
-                    self.root_height += 1;
+                let old_len = self.size;
+                self.grow_zero(new_len);
+                if value != 0 {
+                    self.fill_range(old_len..new_len, value);
                 }
-                self.size = new_len;
             }
         }
     }
+
+    pub fn fill_range(&mut self, range: Range<usize>, value: u8) {}
 
     /// Writes data at the specified offset.
     ///
