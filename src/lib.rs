@@ -1,3 +1,10 @@
+//! A [SharedBuffer] is similar to a `Vec<u8>`, but with copy on write semantics.
+//!
+//! SharedBuffer is intended to provide cheap snapshotting on byte buffers.
+//! Internally, the data is broken up into segments that are organized in a tree structure.
+//! Only modified subtrees are cloned, so buffers with only little differences can share most of their memory.
+//! Moreover, segments which contain only zeros take up no memory.
+
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::mem;
@@ -135,6 +142,7 @@ impl Default for SharedBuffer {
 }
 
 impl SharedBuffer {
+    /// Creates an empty buffer.
     pub fn new() -> Self {
         Self {
             root_height: 0,
@@ -143,16 +151,19 @@ impl SharedBuffer {
         }
     }
 
-    pub fn resize(&mut self, new_size: usize) {
-        match new_size.cmp(&self.size) {
+    /// Resizes the buffer, so that `len == new_len`.
+    ///
+    /// If `new_len` is greater than `len`, the new space in the buffer is filled with zeros.
+    pub fn resize_zero(&mut self, new_len: usize) {
+        match new_len.cmp(&self.size) {
             Ordering::Less => {
                 self.root
-                    .clear_range(self.root_height, new_size..tree_size(self.root_height));
-                self.size = new_size;
+                    .clear_range(self.root_height, new_len..tree_size(self.root_height));
+                self.size = new_len;
             }
             Ordering::Equal => {}
             Ordering::Greater => {
-                while tree_size(self.root_height) < new_size {
+                while tree_size(self.root_height) < new_len {
                     if self.root.0.is_some() {
                         let new_root = Arc::new(Node::Inner(array_init::array_init(|x| {
                             if x == 0 {
@@ -165,16 +176,20 @@ impl SharedBuffer {
                     }
                     self.root_height += 1;
                 }
-                self.size = new_size;
+                self.size = new_len;
             }
         }
     }
 
-    /// Write data at specified offset, growing if necessary.
+    /// Writes data at the specified offset.
+    ///
+    /// If this extends past the current end of the buffer, the buffer is automatically resized.
+    /// If offset is larger than the current buffer length, the space between the current buffer
+    /// end and the written region is filled with zeros.
     pub fn write(&mut self, offset: usize, data: &[u8]) {
         let write_end = offset + data.len();
         if self.size < write_end {
-            self.resize(write_end);
+            self.resize_zero(write_end);
         }
         if data.is_empty() {
             return;
@@ -182,10 +197,14 @@ impl SharedBuffer {
         self.root.set_range(self.root_height, offset, data);
     }
 
+    /// Returns `true` if the buffer length is zero.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
+    /// Returns the length of the buffer, the number of bytes it contains.
+    ///
+    /// The memory footprint of the buffer may be much smaller than this due to omission of zero segments and sharing with other buffers.
     pub fn len(&self) -> usize {
         self.size
     }
@@ -250,6 +269,9 @@ impl SharedBuffer {
         }
     }
 
+    /// Returns an iterator over the byte slices constituting the buffer.
+    ///
+    /// The returned slices may overlap.
     pub fn chunks(&self) -> impl Iterator<Item = &[u8]> {
         let mut emitted = 0;
         self.iter_nodes_pre_order()
@@ -272,7 +294,13 @@ impl SharedBuffer {
             .filter(|x| !x.is_empty())
     }
 
+    /// Returns an iterator over the buffer.
+    pub fn iter(&self) -> impl Iterator<Item = &u8> {
+        self.chunks().flat_map(|x| x.iter())
+    }
+
+    #[doc(hidden)]
     pub fn bytes(&self) -> impl Iterator<Item = u8> + '_ {
-        self.chunks().flat_map(|x| x.iter().copied())
+        self.iter().copied()
     }
 }

@@ -67,7 +67,7 @@ pub fn test(ops: &[Op]) {
             }
             Op::Resize(len) => {
                 let len = *len as usize;
-                our_vec.resize(len);
+                our_vec.resize_zero(len);
                 std_vec.resize(len, 0);
             }
         }
