@@ -477,7 +477,8 @@ impl Extend<u8> for SnapBuf {
             let (consumed, leaf) = generate_leaf(in_leaf_offset, it);
             if leaf.0.is_some() {
                 self.grow_height_until(self.size + 1);
-                self.root.put_leaf(self.root_height, self.size, leaf);
+                self.root
+                    .put_leaf(self.root_height, self.size - in_leaf_offset, leaf);
             }
             self.size = self.size - in_leaf_offset + consumed;
             if consumed < LEAF_SIZE {
