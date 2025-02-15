@@ -92,8 +92,8 @@ fn random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
 define_op!(
     fn rng();
     fn std_vec();
-    fn resize(len: usize, value: u8) {
-        (len, value)
+    fn resize(len: u16, value: u8) {
+        (len as usize, value)
     }
     fn fill_range(range: Range<u16>, value: u8) {
         filter(range.start <= range.end && *value != 0);
