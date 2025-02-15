@@ -81,6 +81,11 @@ macro_rules! define_op {
 fn random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
     let mut b = vec![0u8; len];
     rng.fill(&mut b[..]);
+    for b in &mut b {
+        if *b == 0 {
+            *b = 1;
+        }
+    }
     b
 }
 
