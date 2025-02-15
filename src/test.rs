@@ -96,7 +96,7 @@ define_op!(
         (len, value)
     }
     fn fill_range(range: Range<u16>, value: u8) {
-        filter(range.start <= range.end);
+        filter(range.start <= range.end && *value != 0);
         (cast_range(range.clone()), value)
     }
     fn write(range: Range<u16>) {
