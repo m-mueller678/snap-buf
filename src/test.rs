@@ -45,6 +45,7 @@ macro_rules! define_op {
         )*
     ) => {
         #[derive(Debug, Arbitrary)]
+        #[allow(non_camel_case_types)]
         pub enum Op {
             $($name{$($arg:$Arg),*}),*
         }
@@ -148,7 +149,14 @@ fn cast_range(x: Range<u16>) -> Range<usize> {
 pub const MAX_TEST_OPS: usize = 250;
 
 pub fn test(ops: Vec<Op>) -> Result<(), ()> {
-    assert!(ops.len() <= MAX_TEST_OPS);
+    if ops.len() > MAX_TEST_OPS {
+        return Err(());
+    }
+    for op in &ops {
+        if !op.check() {
+            return Err(());
+        }
+    }
     let mut our_vec = SnapBuf::new();
     let mut std_vec = Vec::new();
     let rng = &mut SmallRng::seed_from_u64(1);

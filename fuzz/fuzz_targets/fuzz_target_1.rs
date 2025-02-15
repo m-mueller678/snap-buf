@@ -1,13 +1,12 @@
 #![no_main]
 
 use libfuzzer_sys::{fuzz_target, Corpus};
-use shared_buffer::test::{test, Op, MAX_TEST_OPS};
+use snap_buf::test::{test, Op, MAX_TEST_OPS};
 
 fuzz_target!(|ops: Vec<Op>|->Corpus{
-    if ops.len()>MAX_TEST_OPS{
-        Corpus::Reject
-    }else{
-        test(&ops);
+    if test(ops).is_ok(){
         Corpus::Keep
+    }else{
+        Corpus::Reject
     }
 });
