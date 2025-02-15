@@ -282,6 +282,9 @@ impl SnapBuf {
     ///
     /// This is equivalent to calling [write](Self::write) with a slice filled with value.
     pub fn fill_range(&mut self, range: Range<usize>, value: u8) {
+        if range.is_empty() {
+            return;
+        }
         if self.size < range.end {
             self.grow_zero(range.end);
         }
