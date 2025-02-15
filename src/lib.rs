@@ -416,8 +416,10 @@ impl SnapBuf {
     pub fn extend_from_slice(&mut self, data: &[u8]) {
         self.write(self.size, data)
     }
+}
 
-    pub fn extend(&mut self, it: &mut impl Iterator<Item = u8>) {
+impl Extend<u8> for SnapBuf {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
         fn generate_leaf(
             start_at: usize,
             iter: &mut impl Iterator<Item = u8>,
@@ -454,6 +456,7 @@ impl SnapBuf {
             (consumed, NodePointer(Some(leaf)))
         }
 
+        let it = &mut iter.into_iter();
         if self.size < tree_size(self.root_height) {
             if let Some((offset, first_leaf)) = self.root.locate_leaf(self.root_height, self.size) {
                 for i in offset..LEAF_SIZE {
