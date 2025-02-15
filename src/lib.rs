@@ -69,7 +69,7 @@ impl NodePointer {
     }
 
     fn set_range(&mut self, height: usize, start: isize, values: &[u8]) {
-        deconstruct_range!(start..end = start .. start + values.len() as isize ,tree_size(height));
+        deconstruct_range!(start..end = start .. start + values.len() as isize ,height);
         match self.get_mut(height) {
             Node::Inner(children) => {
                 for (child_offset, child) in
@@ -84,7 +84,7 @@ impl NodePointer {
                 } else {
                     (values, &mut bytes[start as usize..])
                 };
-                let len = src.len() - dst.len();
+                let len = src.len().min(dst.len());
                 dst[..len].copy_from_slice(&src[..len]);
             }
         }
