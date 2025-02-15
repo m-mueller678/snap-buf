@@ -281,6 +281,8 @@ impl SnapBuf {
     /// Fill the given range with copies of value.
     ///
     /// This is equivalent to calling [write](Self::write) with a slice filled with value.
+    /// Calling this with `value = 0` is not guaranteed to free up the zeroed segments,
+    /// use [clear_range](Self::clear_range) if that is required.
     pub fn fill_range(&mut self, range: Range<usize>, value: u8) {
         if self.size < range.end {
             self.grow_zero(range.end);
@@ -297,6 +299,9 @@ impl SnapBuf {
     /// If this extends past the current end of the buffer, the buffer is automatically resized.
     /// If offset is larger than the current buffer length, the space between the current buffer
     /// end and the written region is filled with zeros.
+    ///
+    /// Zeroing parts of the buffer using this method is not guaranteed to free up the zeroed segments,
+    /// use [clear_range](Self::clear_range) if that is required.
     pub fn write(&mut self, offset: usize, data: &[u8]) {
         let write_end = offset + data.len();
         if self.size < write_end {
@@ -320,7 +325,7 @@ impl SnapBuf {
         self.size
     }
 
-    /// Fill a range with zeros, possibly freeing memory.
+    /// Fill a range with zeros, freeing memory if possible.
     ///
     /// # Panics
     /// Panics if range end is `range.end` > `self.len()`.
