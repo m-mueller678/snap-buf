@@ -1,6 +1,6 @@
 [package]
 name = "snap-buf"
-version = "0.2.2"
+version = "0.3.0"
 edition = "2021"
 keywords = ["buffer","byte-buffer","byte-buffer","cow","mvcc"]
 categories = ["no-std","memory-management","data-structures","concurrency"]

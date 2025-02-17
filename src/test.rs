@@ -78,27 +78,33 @@ macro_rules! define_op {
     };
 }
 
-fn random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
-    let mut b = vec![0u8; len];
-    rng.fill(&mut b[..]);
-    for b in &mut b {
-        if *b == 0 {
-            *b = 1;
+fn random_bytes(rng: &mut SmallRng, len: usize, allow_zeros: bool) -> Vec<u8> {
+    fn dense(rng: &mut SmallRng, len: usize) -> Vec<u8> {
+        let mut b = vec![0u8; len];
+        rng.fill(&mut b[..]);
+        for b in &mut b {
+            if *b == 0 {
+                *b = 1;
+            }
         }
+        b
     }
-    b
-}
-
-fn sparse_random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
-    let mut b = vec![0u8; len];
-    let mut written = 0;
-    while written < len {
-        let skip_to = rng.random_range(written..=len);
-        let write_to = rng.random_range(skip_to..=len);
-        rng.fill(&mut b[skip_to..write_to]);
-        written = write_to;
+    fn sparse(rng: &mut SmallRng, len: usize) -> Vec<u8> {
+        let mut b = vec![0u8; len];
+        let mut written = 0;
+        while written < len {
+            let skip_to = rng.random_range(written..=len);
+            let write_to = rng.random_range(skip_to..=len);
+            rng.fill(&mut b[skip_to..write_to]);
+            written = write_to;
+        }
+        b
     }
-    b
+    if allow_zeros && rng.random() {
+        sparse(rng, len)
+    } else {
+        dense(rng, len)
+    }
 }
 
 define_op!(
@@ -113,7 +119,12 @@ define_op!(
     }
     fn write(range: Range<u16>) {
         filter(range.start <= range.end);
-        let data = random_bytes(rng, range.len());
+        let data = random_bytes(rng, range.len(), false);
+        (range.start as usize, &*data)
+    }
+    fn write_with_zeros(range: Range<u16>) {
+        filter(range.start <= range.end);
+        let data = random_bytes(rng, range.len(), true);
         (range.start as usize, &*data)
     }
     fn clear() {
@@ -122,12 +133,20 @@ define_op!(
     fn truncate(len: u16) {
         (len as usize)
     }
-    fn extend(len: u16, sparse: bool) {
-        let data = if sparse {
-            sparse_random_bytes
-        } else {
-            random_bytes
-        }(rng, (len as usize).min(u16::MAX as usize - std_vec.len()));
+    fn extend_from_slice(len: u16) {
+        let data = random_bytes(
+            rng,
+            (len as usize).min(u16::MAX as usize - std_vec.len()),
+            true,
+        );
+        (&data)
+    }
+    fn extend(len: u16) {
+        let data = random_bytes(
+            rng,
+            (len as usize).min(u16::MAX as usize - std_vec.len()),
+            true,
+        );
         (data.iter().copied())
     }
     fn clear_range(range: Range<u16>) {
@@ -164,6 +183,10 @@ impl Vec<u8> {
             self.extend_from_slice(data);
         }
     }
+
+    fn write_with_zeros(&mut self, offset: usize, data: &[u8]) {
+        self.write(offset, data);
+    }
 }
 
 fn cast_range(x: Range<u16>) -> Range<usize> {
@@ -195,5 +218,5 @@ pub fn test(ops: Vec<Op>) -> Result<(), ()> {
 
 #[test]
 fn run_test() {
-    test(vec![]).unwrap()
+    test(vec![Op::extend_from_slice { len: 2 }]).unwrap()
 }

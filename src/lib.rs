@@ -47,6 +47,11 @@ macro_rules! deconstruct_range{
     }
 }
 
+fn range_all<T, const C: usize>(x: &[T; C], mut f: impl FnMut(&T) -> bool) -> bool {
+    let last = f(x.last().unwrap());
+    last && x[0..C - 1].iter().all(f)
+}
+
 impl NodePointer {
     fn children(&self) -> Option<&[NodePointer; INNER_SIZE]> {
         match &**(self.0.as_ref()?) {
@@ -68,14 +73,17 @@ impl NodePointer {
         Arc::make_mut(arc)
     }
 
-    fn set_range(&mut self, height: usize, start: isize, values: &[u8]) {
+    fn set_range<const FREE_ZEROS: bool>(&mut self, height: usize, start: isize, values: &[u8]) {
         deconstruct_range!(start..end = start .. start + values.len() as isize ,height);
         match self.get_mut(height) {
             Node::Inner(children) => {
                 for (child_offset, child) in
                     Self::affected_children(children, height - 1, start..end)
                 {
-                    child.set_range(height - 1, start - child_offset, values);
+                    child.set_range::<FREE_ZEROS>(height - 1, start - child_offset, values);
+                }
+                if FREE_ZEROS && range_all(children, |c| c.0.is_none()) {
+                    self.0 = None;
                 }
             }
             Node::Leaf(bytes) => {
@@ -86,6 +94,9 @@ impl NodePointer {
                 };
                 let len = src.len().min(dst.len());
                 dst[..len].copy_from_slice(&src[..len]);
+                if FREE_ZEROS && range_all(bytes, |b| *b == 0) {
+                    self.0 = None;
+                }
             }
         }
     }
@@ -124,11 +135,6 @@ impl NodePointer {
     }
 
     fn clear_range(&mut self, height: usize, range: Range<isize>) {
-        fn range_all<T, const C: usize>(x: &[T; C], mut f: impl FnMut(&T) -> bool) -> bool {
-            let last = f(x.last().unwrap());
-            last && x[0..C - 1].iter().all(f)
-        }
-
         deconstruct_range!(start..end = range,height);
         if start <= 0 && end as usize >= tree_size(height) || self.0.is_none() {
             self.0 = None;
@@ -301,8 +307,17 @@ impl SnapBuf {
     /// end and the written region is filled with zeros.
     ///
     /// Zeroing parts of the buffer using this method is not guaranteed to free up the zeroed segments,
-    /// use [clear_range](Self::clear_range) if that is required.
+    /// use [write_with_zeros](Self::write_with_zeros) if that is required.
     pub fn write(&mut self, offset: usize, data: &[u8]) {
+        self.write_inner::<false>(offset, data);
+    }
+
+    /// Like [write](Self::write), but detects and frees newly zeroed segments in the buffer.
+    pub fn write_with_zeros(&mut self, offset: usize, data: &[u8]) {
+        self.write_inner::<true>(offset, data);
+    }
+
+    fn write_inner<const FREE_ZEROS: bool>(&mut self, offset: usize, data: &[u8]) {
         let write_end = offset + data.len();
         if self.size < write_end {
             self.resize(write_end, 0);
@@ -310,7 +325,8 @@ impl SnapBuf {
         if data.is_empty() {
             return;
         }
-        self.root.set_range(self.root_height, offset as isize, data);
+        self.root
+            .set_range::<FREE_ZEROS>(self.root_height, offset as isize, data);
     }
 
     /// Returns `true` if the buffer length is zero.
@@ -422,7 +438,7 @@ impl SnapBuf {
     }
 
     pub fn extend_from_slice(&mut self, data: &[u8]) {
-        self.write(self.size, data)
+        self.write_with_zeros(self.size, data)
     }
 }
 
