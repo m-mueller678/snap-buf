@@ -15,7 +15,7 @@ use core::ops::Range;
 use core::{iter, mem, slice};
 use smallvec::SmallVec;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SnapBuf {
     size: usize,
     root_height: usize,
