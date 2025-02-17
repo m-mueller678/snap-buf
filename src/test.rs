@@ -119,6 +119,9 @@ define_op!(
     fn clear() {
         ()
     }
+    fn truncate(len: u16) {
+        (len as usize)
+    }
     fn extend(len: u16, sparse: bool) {
         let data = if sparse {
             sparse_random_bytes

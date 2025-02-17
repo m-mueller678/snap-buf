@@ -273,7 +273,7 @@ impl SnapBuf {
     ///
     /// If `new_len` is greater or equal to the buffer’s current length, this has no effect.
     pub fn truncate(&mut self, new_len: usize) {
-        if new_len > self.size {
+        if new_len < self.size {
             self.shrink(new_len);
         }
     }
