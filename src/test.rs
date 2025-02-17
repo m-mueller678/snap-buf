@@ -89,6 +89,18 @@ fn random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
     b
 }
 
+fn sparse_random_bytes(rng: &mut SmallRng, len: usize) -> Vec<u8> {
+    let mut b = vec![0u8; len];
+    let mut written = 0;
+    while written < len {
+        let skip_to = rng.random_range(written..=len);
+        let write_to = rng.random_range(skip_to..=len);
+        rng.fill(&mut b[skip_to..write_to]);
+        written = write_to;
+    }
+    b
+}
+
 define_op!(
     fn rng();
     fn std_vec();
@@ -107,8 +119,12 @@ define_op!(
     fn clear() {
         ()
     }
-    fn extend(len: u16) {
-        let data = random_bytes(rng, (len as usize).min(u16::MAX as usize - std_vec.len()));
+    fn extend(len: u16, sparse: bool) {
+        let data = if sparse {
+            sparse_random_bytes
+        } else {
+            random_bytes
+        }(rng, (len as usize).min(u16::MAX as usize - std_vec.len()));
         (data.iter().copied())
     }
     fn clear_range(range: Range<u16>) {
