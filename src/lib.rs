@@ -195,6 +195,20 @@ impl NodePointer {
             Node::Leaf(x) => Some((offset, x)),
         }
     }
+
+    fn locate_leaf_ref(&self, heigth: usize, offset: usize) -> (usize, &[u8; LEAF_SIZE]) {
+        if let Some(x) = &self.0 {
+            match &**x {
+                Node::Inner(children) => {
+                    let child_size = tree_size(heigth - 1);
+                    children[offset / child_size].locate_leaf_ref(heigth - 1, offset % child_size)
+                }
+                Node::Leaf(data) => (offset, data),
+            }
+        } else {
+            (offset % LEAF_SIZE, &ZERO_LEAF)
+        }
+    }
 }
 
 const fn const_tree_size(height: usize) -> usize {
@@ -214,6 +228,8 @@ impl Default for SnapBuf {
         Self::new()
     }
 }
+
+static ZERO_LEAF: [u8; LEAF_SIZE] = [0; LEAF_SIZE];
 
 impl SnapBuf {
     /// Creates an empty buffer.
@@ -298,6 +314,17 @@ impl SnapBuf {
         }
         let range = range.start as isize..range.end as isize;
         self.root.fill_range(self.root_height, range, value);
+    }
+
+    pub fn read(&self, offset: usize) -> &[u8] {
+        if offset == self.size {
+            return &[];
+        }
+        assert!(offset < self.size);
+        let max_len = self.size - offset;
+        let (offset, leaf) = self.root.locate_leaf_ref(self.root_height, offset);
+        let data = &leaf[offset..];
+        &data[..data.len().min(max_len)]
     }
 
     /// Writes data at the specified offset.
@@ -408,16 +435,13 @@ impl SnapBuf {
     pub fn chunks(&self) -> impl Iterator<Item = &[u8]> {
         let mut emitted = 0;
         self.iter_nodes_pre_order()
-            .flat_map(|(node, height)| {
-                let zero_leaf = &[0u8; LEAF_SIZE];
-                match node.0.as_deref() {
-                    None => {
-                        let leaf_count = INNER_SIZE.pow(height as u32);
-                        iter::repeat_n(zero_leaf, leaf_count)
-                    }
-                    Some(Node::Inner(_)) => iter::repeat_n(zero_leaf, 0),
-                    Some(Node::Leaf(b)) => iter::repeat_n(b, 1),
+            .flat_map(|(node, height)| match node.0.as_deref() {
+                None => {
+                    let leaf_count = INNER_SIZE.pow(height as u32);
+                    iter::repeat_n(&ZERO_LEAF, leaf_count)
                 }
+                Some(Node::Inner(_)) => iter::repeat_n(&ZERO_LEAF, 0),
+                Some(Node::Leaf(b)) => iter::repeat_n(b, 1),
             })
             .map(move |x| {
                 let emit = (self.size - emitted).min(x.len());

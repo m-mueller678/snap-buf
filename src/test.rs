@@ -47,12 +47,14 @@ macro_rules! define_op {
         #[derive(Debug, Arbitrary)]
         #[allow(non_camel_case_types)]
         pub enum Op {
+            read{offset:u16},
             $($name{$($arg:$Arg),*}),*
         }
 
         impl Op{
             fn check(&self)->bool{
                 match self{
+                    Op::read{..}=>{},
                     $(
                     Op::$name{$($arg),*} =>{
                         $(return $filter;)?
@@ -64,6 +66,12 @@ macro_rules! define_op {
 
             fn apply(self,$std_vec:&mut Vec<u8>,our:&mut SnapBuf,$rand_ident:&mut SmallRng)->Result<(),()>{
                 match self{
+                    Op::read{offset}=>{
+                        let offset = (offset as usize).min(our.len());
+                        let data = our.read(offset);
+                        assert_eq!(data.is_empty(),offset == our.len());
+                        assert_eq!(data,&$std_vec[offset .. ][..data.len()]);
+                    }
                     $(
                     Op::$name{$($arg),*} =>{
                         $(let $extra_name = $extra_val;)*
@@ -218,5 +226,13 @@ pub fn test(ops: Vec<Op>) -> Result<(), ()> {
 
 #[test]
 fn run_test() {
-    test(vec![Op::extend_from_slice { len: 2 }]).unwrap()
+    use Op::*;
+    test(vec![
+        fill_range {
+            range: 32..128,
+            value: 8,
+        },
+        read { offset: 130 },
+    ])
+    .unwrap()
 }
