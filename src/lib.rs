@@ -6,7 +6,7 @@
 //! Moreover, subtrees which contain only zeros take up no memory.
 
 extern crate alloc;
-#[cfg(feature = "test")]
+#[cfg(feature = "std")]
 extern crate std;
 
 use alloc::sync::Arc;
@@ -15,6 +15,9 @@ use core::ops::Range;
 use core::{iter, mem, slice};
 use smallvec::SmallVec;
 
+/// A copy on write buffer.
+///
+/// See the crate level documentation for more details.
 #[derive(Debug, Clone)]
 pub struct SnapBuf {
     size: usize,
@@ -27,6 +30,12 @@ const INNER_SIZE: usize = if cfg!(feature = "test") { 4 } else { 500 };
 
 #[cfg(feature = "test")]
 pub mod test;
+
+#[cfg(feature = "std")]
+mod cursor;
+
+#[cfg(feature = "std")]
+pub use cursor::SnapBufCursor;
 
 #[derive(Clone, Debug)]
 enum Node {

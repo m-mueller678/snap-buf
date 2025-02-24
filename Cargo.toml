@@ -1,6 +1,6 @@
 [package]
 name = "snap-buf"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 keywords = ["buffer","byte-buffer","byte-buffer","cow","mvcc"]
 categories = ["no-std","memory-management","data-structures","concurrency"]
@@ -19,4 +19,6 @@ rand = {version = "0.9.0",optional = true,features = ["small_rng"]}
 extend = {version = "1.2.0",optional = true}
 
 [features]
-test=["dep:itertools","dep:arbitrary","dep:rand","dep:extend"]
+default=["std"]
+test=["dep:itertools","dep:arbitrary","dep:rand","dep:extend","std"]
+std=[]
